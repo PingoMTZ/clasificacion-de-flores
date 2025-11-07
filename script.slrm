@@ -1,0 +1,12 @@
+#!/bin/bash
+
+#SBATCH --nodes=8           # numero de nodos (maximo 10)
+#SBATCH --job-name=digitos # nombre del job
+#SBATCH --ntasks=8          # <----- número de procesos que se requieran
+#SBATCH --time=1:00:00      # tiempo de ejecucion (maximo 168 hrs)
+#SBATCH --partition=cpu     # solo hay una cola, asi que puede omitirse
+
+
+echo "Corriendo flores con CNN" # <--- opcional
+source activate tf2_onnx
+python flores.py
