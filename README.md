@@ -9,6 +9,7 @@ Clasificación de 104 tipos de flores utilizando el modelo base preentrenado Eff
 * Código de Python usado para el proyecto en flowers.py
 * Modelo creado a traves del código en flowers.onnx
 * Página web para el reconocimiento de las flores con cámara en index.html
+* Script de Slurm para correr código script.slrm
 * Imágenes para la página web
 
 ## Requisitos

@@ -4,8 +4,20 @@ from matplotlib import pyplot as plt
 import tensorflow as tf
 import tf2onnx
 from sklearn.metrics import classification_report, f1_score
+import random
 
-# DATA_PATH is set up to read the 224x224 images of the dataset
+# --------------------------------------
+# FIJAR SEMILLAS PARA REPRODUCIBILIDAD
+# --------------------------------------
+SEED = 42
+
+import random
+os.environ['PYTHONHASHSEED'] = str(SEED)
+random.seed(SEED)
+np.random.seed(SEED)
+tf.random.set_seed(SEED)
+
+# DATA_PATH prepara para leer imágenes de 224x224 del conjunto de datos
 DATA_PATH = "/PATH_TO_DATA/flower-classification-with-tpus/tfrecords-jpeg-224x224"
 IMAGE_SIZE = [224, 224]
 BATCH_SIZE = 24
@@ -46,9 +58,9 @@ CLASSES = [
     'bromelia', 'blanket flower', 'trumpet creeper', 'blackberry lily', 'common tulip', 'wild rose'
 ]
 
-# ------------------------------------------
-# Dataset normalization and load procedures
-# ------------------------------------------
+# -------------------------------------------
+# Normalización y uso del conjunto de datos
+# -------------------------------------------
 
 def decode_image(image_data):
     image = tf.image.decode_jpeg(image_data, channels=3)
@@ -79,7 +91,7 @@ def load_dataset(filenames, labeled=True, ordered=False):
     dataset = tf.data.TFRecordDataset(filenames, num_parallel_reads=AUTO)
     if not ordered:
         options = tf.data.Options()
-        options.experimental_deterministic = False
+        options.experimental_deterministic = True
         dataset = dataset.with_options(options)
     if labeled:
         dataset = dataset.map(read_labeled_tfrecord, num_parallel_calls=AUTO)
@@ -94,7 +106,7 @@ def data_augment(image, label):
 def get_training_dataset():
     dataset = load_dataset(TRAINING_FILENAMES)
     dataset = dataset.map(data_augment, num_parallel_calls=AUTO)
-    dataset = dataset.repeat().shuffle(2048).batch(BATCH_SIZE).prefetch(AUTO)
+    dataset = dataset.repeat().shuffle(2048, seed=SEED).batch(BATCH_SIZE).prefetch(AUTO)
     return dataset
 
 def get_validation_dataset():
@@ -143,19 +155,19 @@ for image, idnum in get_test_dataset().take(3):
 print("Test data IDs:", idnum.numpy().astype('U')) # U=unicode string
 
 #-----------------------------
-# Base model EfficientNetB0
+# Modelo base EfficientNetB0
 #-----------------------------
 
-# Load EfficientNetB0 pretrained arquitecture with ImageNet weights
+# Carga el modelo preentrenado EfficientNetB0 con pesos de ImageNet
 base_model = tf.keras.applications.EfficientNetB0(
     input_shape=(224, 224, 3),
     include_top=False,
     weights='imagenet'
 )
 
-base_model.trainable = False # Freeze pretrained weights
+base_model.trainable = False # Congela los pesos
 
-# Build new sequential model on top of base model
+# Construye una nueva capa secuencial encima del modelo base
 model = tf.keras.models.Sequential([
     base_model,
     tf.keras.layers.GlobalAveragePooling2D(),
@@ -185,7 +197,7 @@ val_loss = history.history['val_loss']
 epochs_range = range(len(acc))
 
 #--------------------
-# Accuracy
+# Precisión
 #--------------------
 
 plt.figure(figsize=(10, 5))
@@ -199,7 +211,7 @@ plt.ylabel('Accuracy')
 plt.grid(True)
 
 #--------------------
-# Loss
+# Perdida
 #--------------------
 
 plt.subplot(1, 2, 2)
@@ -234,9 +246,9 @@ print(classification_report(y_true, y_pred, target_names=CLASSES, digits=3))
 f1_macro = f1_score(y_true, y_pred, average='macro')
 print(f"F1 Score (macro): {f1_macro:.4f}")
 
-# ----------------------------
-# Save model in ONNX standard
-# ----------------------------
+# -------------------------------------
+# Guarda el modelo en el estandar ONNX
+# -------------------------------------
 
 os.makedirs("dir_exit", exist_ok=True)
 
@@ -254,4 +266,4 @@ model_proto, _ = tf2onnx.convert.from_keras(model_keras,
                                             input_signature=input_signature,
                                             output_path=route_onnx)
 
-print(f"Model saved in dir_exit:\n- Keras: {route_keras}\n- ONNX: {route_onnx}")
+print(f"Modelo guardado en dir_exit:\n- Keras: {route_keras}\n- ONNX: {route_onnx}")
