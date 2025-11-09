@@ -14,8 +14,9 @@
     <style>
       #resultado {
         font-weight: bold;
-        font-size: 6rem;
+        font-size: 2.5rem; /* Ajustado para nombres largos */
         text-align: center;
+        min-height: 100px; /* Espacio para que no "salte" */
       }
     </style>
   </head>
@@ -38,7 +39,9 @@
             <video id="video" playsinline autoplay style="width: 1px;"></video>
             <button class="btn btn-primary mb-2" id="cambiar-camara" onclick="cambiarCamara();">Cambiar camara</button>
             <canvas id="canvas" width="400" height="400" style="max-width: 100%;"></canvas>
-            <canvas id="otrocanvas" width="150" height="150" style="display: none"></canvas>
+            
+            <canvas id="otrocanvas" width="224" height="224" style="display: none"></canvas>
+            
             <div id="resultado"></div>            
           </div>
         </div>
@@ -61,6 +64,29 @@
      var facingMode = "user";
 
      var modelo = null;
+
+     // Lista de clases 
+     const CLASES_FLORES = [
+         'pink primrose', 'hard-leaved pocket orchid', 'canterbury bells', 'sweet pea', 'wild geranium',
+         'tiger lily', 'moon orchid', 'bird of paradise', 'monkshood', 'globe thistle',
+         'snapdragon', "colt's foot", 'king protea', 'spear thistle', 'yellow iris', 'globe-flower',
+         'purple coneflower', 'peruvian lily', 'balloon flower', 'giant white arum lily',
+         'fire lily', 'pincushion flower', 'fritillary', 'red ginger', 'grape hyacinth', 'corn poppy',
+         'prince of wales feathers', 'stemless gentian', 'artichoke', 'sweet william',
+         'carnation', 'garden phlox', 'love in the mist', 'cosmos', 'alpine sea holly', 'ruby-lipped cattleya',
+         'cape flower', 'great masterwort', 'siam tulip', 'lenten rose',
+         'barberton daisy', 'daffodil', 'sword lily', 'poinsettia', 'bolero deep blue', 'wallflower',
+         'marigold', 'buttercup', 'daisy', 'common dandelion',
+         'petunia', 'wild pansy', 'primula', 'sunflower', 'lilac hibiscus', 'bishop of llandaff',
+         'gaura', 'geranium', 'orange dahlia', 'pink-yellow dahlia',
+         'cautleya spicata', 'japanese anemone', 'black-eyed susan', 'silverbush', 'californian poppy',
+         'osteospermum', 'spring crocus', 'iris', 'windflower', 'tree poppy',
+         'gazania', 'azalea', 'water lily', 'rose', 'thorn apple', 'morning glory', 'passion flower',
+         'lotus', 'toad lily', 'anthurium', 'frangipani', 'clematis', 'hibiscus', 'columbine',
+         'desert-rose', 'tree mallow', 'magnolia', 'cyclamen', 'watercress', 'canna lily', 'hippeastrum',
+         'bee balm', 'pink quill', 'foxglove', 'bougainvillea', 'camellia', 'mallow', 'mexican petunia',
+         'bromelia', 'blanket flower', 'trumpet creeper', 'blackberry lily', 'common tulip', 'wild rose'
+     ];
 
      (async() => {
          console.log("Cargando modelo...");
@@ -130,31 +156,70 @@
          setTimeout(procesarCamara, 20);
      }
 
+
      function predecir() {
          if (modelo != null) {
-             resample_single(canvas, 100, 100, otrocanvas);
+             resample_single(canvas, 224, 224, otrocanvas);
 
              var ctx2 = otrocanvas.getContext("2d");
-             var imgData = ctx2.getImageData(0, 0, 100, 100);
+             var imgData = ctx2.getImageData(0, 0, 224, 224);
 
-             // Convertir imagen a float32 y normalizar
-             var input = new Float32Array(100 * 100);
-             for (var i = 0, p = 0; i < imgData.data.length; i += 4, p++) {
-                 var rojo = imgData.data[i] / 255;
-                 var verde = imgData.data[i+1] / 255;
-                 var azul = imgData.data[i+2] / 255;
-                 var gris = (rojo + verde + azul)/3;
-                 input[p] = gris;
+             const width = 224;
+             const height = 224;
+
+             // tensor con 3 canales (RGB)
+             // El array debe tener un tamaño de width * height * 3
+             var input = new Float32Array(width * height * 3);
+
+             // Iterar sobre los datos de la imagen (RGBA) y llenar el array 'input' (RGB)
+             var p = 0; // Puntero para el array 'input'
+             for (var i = 0; i < imgData.data.length; i += 4) { // Saltamos 4 en 4 (R, G, B, A)
+                 
+                 // IMPORTANTE: No normalizamos (no dividimos por 255).
+                 // El modelo EfficientNetB0 de Keras hace el pre-procesamiento internamente.
+                 // Solo pasamos los valores [0-255] como float.
+                 input[p] = imgData.data[i];       // R
+                 input[p + 1] = imgData.data[i + 1]; // G
+                 input[p + 2] = imgData.data[i + 2]; // B
+                 
+                 p += 3; // Avanzamos 3 en el array 'input'
              }
 
-             // ONNX espera [1,1,100,100]
-             var tensor = new ort.Tensor('float32', input, [1, 100, 100, 1]);
+             // Crear el tensor con la forma correcta: [batch_size, height, width, channels]
+             var tensor = new ort.Tensor('float32', input, [1, height, width, 3]);
 
-             modelo.run({'input': tensor}).then(results => {
-                 var output = results[Object.keys(results)[0]].data;  // primera salida
-                 var respuesta = output[0] <= 0.5 ? "Gato" : "Perro";
-                 document.getElementById("resultado").innerHTML = respuesta;
-             }).catch(err => console.error(err));
+             // Ejecutar el modelo
+             // Usamos try...catch asíncrono para manejar errores
+             (async () => {
+                 try {
+                     var feeds = { 'input': tensor }; // El nombre 'input' debe coincidir
+                     var results = await modelo.run(feeds);
+
+                     // Procesar la salida de 104 clases
+                     // El nombre 'output' debe coincidir con el nombre de salida
+                     var output = results['output'].data; // Array de 104 floats
+
+                     // Encontrar el índice del valor más alto (la clase con mayor probabilidad)
+                     var maxIndex = 0;
+                     var maxValue = output[0];
+                     for (var i = 1; i < output.length; i++) {
+                         if (output[i] > maxValue) {
+                             maxValue = output[i];
+                             maxIndex = i;
+                         }
+                     }
+
+                     // Obtener el nombre de la clase usando el índice
+                     var respuesta = CLASES_FLORES[maxIndex];
+
+                     //  Mostrar el resultado
+                     document.getElementById("resultado").innerHTML = respuesta;
+
+                 } catch (err) {
+                     console.error("Error al ejecutar el modelo:", err);
+                     // Muestra el error de ONNX en la consola
+                 }
+             })();
          }
 
          setTimeout(predecir, 150);
@@ -163,12 +228,10 @@
 
      /**
       * Hermite resize - fast image resize/resample using Hermite filter. 1 cpu version!
-      * 
-      * @param {HtmlElement} canvas
+      * * @param {HtmlElement} canvas
       * @param {int} width
       * @param {int} height
       * @param {boolean} resize_canvas if true, canvas will be resized. Optional.
-      * Cambiado por RT, resize canvas ahora es donde se pone el chiqitillllllo
       */
      function resample_single(canvas, width, height, resize_canvas) {
          var width_source = canvas.width;
